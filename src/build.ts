@@ -12,8 +12,11 @@ const platform = getPlatform() as 'win32' | 'darwin' | 'linux';
 const TARGET_ARCHITECTURE_TYPE = new EnumType([ 'x86_64', 'aarch64' ]);
 
 const CUDNN_ARCHIVE_URL = platform === 'linux'
-	? 'https://developer.download.nvidia.com/compute/cudnn/redist/cudnn/linux-x86_64/cudnn-linux-x86_64-9.10.0.56_cuda12-archive.tar.xz'
-	: 'https://developer.download.nvidia.com/compute/cudnn/redist/cudnn/windows-x86_64/cudnn-windows-x86_64-9.10.0.56_cuda12-archive.zip';
+    ? (options.arch === 'aarch64'
+        ? 'https://developer.download.nvidia.com/compute/cudnn/redist/cudnn/linux-aarch64/cudnn-linux-aarch64-9.10.0.56_cuda12-archive.tar.xz'
+        : 'https://developer.download.nvidia.com/compute/cudnn/redist/cudnn/linux-x86_64/cudnn-linux-x86_64-9.10.0.56_cuda12-archive.tar.xz')
+    : 'https://developer.download.nvidia.com/compute/cudnn/redist/cudnn/windows-x86_64/cudnn-windows-x86_64-9.10.0.56_cuda12-archive.zip';
+
 const TENSORRT_ARCHIVE_URL = platform === 'linux'
 	? 'https://developer.download.nvidia.com/compute/machine-learning/tensorrt/10.10.0/tars/TensorRT-10.10.0.31.Linux.x86_64-gnu.cuda-12.9.tar.gz'
 	: 'https://developer.download.nvidia.com/compute/machine-learning/tensorrt/10.10.0/zip/TensorRT-10.10.0.31.Windows.win10.cuda-12.9.zip';
@@ -149,7 +152,8 @@ await new Command()
 
 		if (options.cuda || options.trt || options.nvrtx) {
 			args.push('-Donnxruntime_USE_FPA_INTB_GEMM=OFF');
-			args.push('-DCMAKE_CUDA_ARCHITECTURES=75;80;90');
+			const cudaArchs = options.arch === 'aarch64' ? '72;87' : '75;80;90';
+    		args.push(`-DCMAKE_CUDA_ARCHITECTURES=${cudaArchs}`);
 			cudaFlags.push('-compress-mode=size');
 		}
 

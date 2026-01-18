@@ -11,11 +11,15 @@ const platform = getPlatform() as 'win32' | 'darwin' | 'linux';
 
 const TARGET_ARCHITECTURE_TYPE = new EnumType([ 'x86_64', 'aarch64' ]);
 
-const CUDNN_ARCHIVE_URL = platform === 'linux'
-    ? (options.arch === 'aarch64'
-        ? 'https://developer.download.nvidia.com/compute/cudnn/redist/cudnn/linux-aarch64/cudnn-linux-aarch64-9.10.0.56_cuda12-archive.tar.xz'
-        : 'https://developer.download.nvidia.com/compute/cudnn/redist/cudnn/linux-x86_64/cudnn-linux-x86_64-9.10.0.56_cuda12-archive.tar.xz')
-    : 'https://developer.download.nvidia.com/compute/cudnn/redist/cudnn/windows-x86_64/cudnn-windows-x86_64-9.10.0.56_cuda12-archive.zip';
+function getCudnnArchiveUrl(arch: string): string {
+    if (platform === 'linux') {
+        return arch === 'aarch64'
+            ? 'https://developer.download.nvidia.com/compute/cudnn/redist/cudnn/linux-aarch64/cudnn-linux-aarch64-9.10.0.56_cuda12-archive.tar.xz'
+            : 'https://developer.download.nvidia.com/compute/cudnn/redist/cudnn/linux-x86_64/cudnn-linux-x86_64-9.10.0.56_cuda12-archive.tar.xz';
+    } else {
+        return 'https://developer.download.nvidia.com/compute/cudnn/redist/cudnn/windows-x86_64/cudnn-windows-x86_64-9.10.0.56_cuda12-archive.zip';
+    }
+}
 
 const TENSORRT_ARCHIVE_URL = platform === 'linux'
 	? 'https://developer.download.nvidia.com/compute/machine-learning/tensorrt/10.10.0/tars/TensorRT-10.10.0.31.Linux.x86_64-gnu.cuda-12.9.tar.gz'
@@ -137,7 +141,8 @@ await new Command()
 			}
 
 			if (!should_skip) {
-				const cudnnArchiveStream = await fetch(CUDNN_ARCHIVE_URL).then(c => c.body!);
+				const cudnnArchiveUrl = getCudnnArchiveUrl(options.arch);
+				const cudnnArchiveStream = await fetch(cudnnArchiveUrl).then(c => c.body!);
 				await Deno.mkdir(cudnnOutPath);
 				await $`tar xvJC ${cudnnOutPath} --strip-components=1 -f -`.stdin(cudnnArchiveStream);
 			}

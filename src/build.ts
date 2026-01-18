@@ -106,10 +106,10 @@ await new Command()
 					// 1. 自动探测存在的 aarch64 g++ 编译器版本
 					const possibleCompilers = [
 						'aarch64-linux-gnu-g++',    // 尝试通用名
-						'aarch64-linux-gnu-g++-14',
-						'aarch64-linux-gnu-g++-13',
-						'aarch64-linux-gnu-g++-12',
 						'aarch64-linux-gnu-g++-11',
+						'aarch64-linux-gnu-g++-12',
+						'aarch64-linux-gnu-g++-13',
+						'aarch64-linux-gnu-g++-14',
 					];
 					
 					let hostCompiler = '';

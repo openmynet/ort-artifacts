@@ -98,26 +98,34 @@ await new Command()
 			// 	cudaFlags.push('-ccbin', 'clang++-18');
 			// }
 
-			// new code
+			// new code - 2026/01
 			if (options.arch === 'aarch64') {
-				// 针对 Linux AArch64 交叉编译
-				// 显式指定交叉编译器，防止 CMake 混用宿主机 Clang
-				env.CC = 'aarch64-linux-gnu-gcc';
-				env.CXX = 'aarch64-linux-gnu-g++';
+				// Linux Cross-compile (x64 -> aarch64)
+				// 使用 Clang 并显式指定 target，规避找不到 g++ 符号链接的问题
+				const targetFlag = '--target=aarch64-linux-gnu';
+				
+				// 将 target 包含在 CC/CXX 中，确保 CMake 的编译器检查(ABI check)能通过
+				env.CC = `clang-18 ${targetFlag}`;
+				env.CXX = `clang++-18 ${targetFlag}`;
+				
+				// 同时添加到 compilerFlags 确保传递给后续构建
+				compilerFlags.push(targetFlag);
 
 				if (options.cuda) {
-					// 关键修复: 告诉 NVCC 使用交叉编译器作为宿主编译器
-					// 之前错误地使用了 clang++-18 (x86_64)，导致链接错误
-					cudaFlags.push('-ccbin', 'aarch64-linux-gnu-g++');
+					// 告诉 NVCC 使用 clang++-18 作为 host compiler
+					cudaFlags.push('-ccbin', 'clang++-18');
+					// 关键: 将 target flag 传递给 host compiler，否则 host 代码会编译成 x86_64
+					cudaFlags.push(`-Xcompiler ${targetFlag}`);
 				}
 			} else {
-				// 针对 Linux x86_64 原生编译
+				// Linux Native (x64)
 				env.CC = 'clang-18';
 				env.CXX = 'clang++-18';
 				if (options.cuda) {
 					cudaFlags.push('-ccbin', 'clang++-18');
 				}
 			}
+			// new ode -end-
 			
 		} else if (platform === 'win32') {
 			args.push('-G', 'Visual Studio 17 2022');

@@ -92,11 +92,33 @@ await new Command()
 		const cudaFlags: string[] = [];
 
 		if (platform === 'linux' && !options.android) {
-			env.CC = 'clang-18';
-			env.CXX = 'clang++-18';
-			if (options.cuda) {
-				cudaFlags.push('-ccbin', 'clang++-18');
+			// env.CC = 'clang-18';
+			// env.CXX = 'clang++-18';
+			// if (options.cuda) {
+			// 	cudaFlags.push('-ccbin', 'clang++-18');
+			// }
+
+			// new code
+			if (options.arch === 'aarch64') {
+				// 针对 Linux AArch64 交叉编译
+				// 显式指定交叉编译器，防止 CMake 混用宿主机 Clang
+				env.CC = 'aarch64-linux-gnu-gcc';
+				env.CXX = 'aarch64-linux-gnu-g++';
+
+				if (options.cuda) {
+					// 关键修复: 告诉 NVCC 使用交叉编译器作为宿主编译器
+					// 之前错误地使用了 clang++-18 (x86_64)，导致链接错误
+					cudaFlags.push('-ccbin', 'aarch64-linux-gnu-g++');
+				}
+			} else {
+				// 针对 Linux x86_64 原生编译
+				env.CC = 'clang-18';
+				env.CXX = 'clang++-18';
+				if (options.cuda) {
+					cudaFlags.push('-ccbin', 'clang++-18');
+				}
 			}
+			
 		} else if (platform === 'win32') {
 			args.push('-G', 'Visual Studio 17 2022');
 			if (options.arch === 'x86_64') {
@@ -234,11 +256,6 @@ await new Command()
 					case 'linux':
 						if (!options.android) {
 							args.push(`-DCMAKE_TOOLCHAIN_FILE=${join(root, 'toolchains', 'aarch64-unknown-linux-gnu.cmake')}`);
-							// FIX: 强制使用 lld 链接器，避免使用默认的 x86_64 ld
-							const linkFlags = '-fuse-ld=lld';
-							args.push(`-DCMAKE_SHARED_LINKER_FLAGS=${linkFlags}`);
-							args.push(`-DCMAKE_MODULE_LINKER_FLAGS=${linkFlags}`);
-							args.push(`-DCMAKE_EXE_LINKER_FLAGS=${linkFlags}`);
 						}
 						break;
 				}

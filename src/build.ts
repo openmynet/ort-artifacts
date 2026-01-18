@@ -106,14 +106,13 @@ await new Command()
 					// 1. 自动探测存在的 aarch64 g++ 编译器版本
 					const possibleCompilers = [
 						'aarch64-linux-gnu-g++',    // 尝试通用名
-						'aarch64-linux-gnu-g++-14', // 尝试具体版本 (GCC 14)
-						'aarch64-linux-gnu-g++-13', // 尝试具体版本 (GCC 13)
+						'aarch64-linux-gnu-g++-14',
+						'aarch64-linux-gnu-g++-13',
 						'aarch64-linux-gnu-g++-12',
 						'aarch64-linux-gnu-g++-11',
 					];
 					
 					let hostCompiler = '';
-					
 					for (const compiler of possibleCompilers) {
 						try {
 							await $`which ${compiler}`.quiet();
@@ -126,50 +125,56 @@ await new Command()
 					}
 
 					if (!hostCompiler) {
-						console.error("Warning: Could not find aarch64-linux-gnu-g++ or versioned alternatives. CUDA build may fail.");
-						hostCompiler = 'aarch64-linux-gnu-g++'; // Fallback
+						console.error("Warning: Could not find aarch64-linux-gnu-g++. CUDA build may fail.");
+						hostCompiler = 'aarch64-linux-gnu-g++';
 					}
 
-                    // 关键修复 1: 显式设置 CMAKE_CUDA_HOST_COMPILER
-                    // 这样 CMake 在执行链接检查时会使用这个交叉编译器，而不是系统默认的 /usr/bin/g++
+                    // 设置 CMake 变量以使用正确的宿主编译器进行链接
                     args.push(`-DCMAKE_CUDA_HOST_COMPILER=${hostCompiler}`);
 
-					// 注意：设置了 CMAKE_CUDA_HOST_COMPILER 后，不需要再手动添加 -ccbin 参数
-
-					// 2. 显式添加 CUDA Include 路径
+					// 2. 关键修复：修补 CUDA 安装以支持交叉编译
+                    // GitHub Runner 的 CUDA 通常缺少 targets/aarch64-linux 目录
 					try {
-						const nvccLocation = (await $`which nvcc`.text()).trim();
-						if (nvccLocation) {
-							const cudaIncludePath = join(nvccLocation, '..', '..', 'include');
-							console.log(`Adding CUDA include path: ${cudaIncludePath}`);
-							cudaFlags.push(`-I${cudaIncludePath}`);
-
-                            // 关键修复 2: 尝试解决库路径问题
-                            // 如果是 GitHub Runner 的标准 CUDA 安装，且没有安装 cross-aarch64 包，
-                            // 我们可能只能链接到 stubs (存根)，否则会链接到 x86_64 的库导致错误。
-                            // 但通常我们需要真实的 cross 库。
-                            // 暂时添加 stubs 路径以尝试通过 CMake 检查 (如果目标仅是编译，stubs 足够；如果是运行，则不行)
-                            const cudaStubsPath = join(nvccLocation, '..', '..', 'targets', 'aarch64-linux', 'lib', 'stubs');
-                            // 注意：GitHub Runner 的 cuda-toolkit 可能不包含 aarch64 目标。
-                            // 如果不存在，CMake 可能会报错。这里做一个简单的存在性检查或回退。
+						const nvccPath = (await $`which nvcc`.text()).trim();
+						if (nvccPath) {
+                            const cudaPath = join(nvccPath, '..', '..');
+                            const targetProfileDir = join(cudaPath, 'targets', 'aarch64-linux');
                             
-                            // 检查是否有 aarch64-linux 目录
-                            const cudaCrossTarget = join(nvccLocation, '..', '..', 'targets', 'aarch64-linux', 'lib');
-                            const sbsaTarget = join(nvccLocation, '..', '..', 'targets', 'sbsa-linux', 'lib');
-                            
-                            if (await exists(cudaCrossTarget)) {
-                                args.push(`-DCMAKE_CUDA_COMPILER_LIBRARY_ROOT=${join(nvccLocation, '..', '..', 'targets', 'aarch64-linux')}`);
-                            } else if (await exists(sbsaTarget)) {
-                                 args.push(`-DCMAKE_CUDA_COMPILER_LIBRARY_ROOT=${join(nvccLocation, '..', '..', 'targets', 'sbsa-linux')}`);
-                            } else {
-                                // 如果没有交叉编译库，尝试强制使用 stub 库来通过配置阶段
-                                // 但这在链接阶段可能会有问题。
-                                console.warn("Warning: Could not find CUDA aarch64 libraries. This might fail linking.");
+                            // 2a. 修复头文件路径 (解决 fatal error: cuda_runtime.h: No such file)
+                            if (!(await exists(join(targetProfileDir, 'include')))) {
+                                console.log("Patching CUDA: Creating target include directory symlink...");
+                                await $`sudo mkdir -p ${targetProfileDir}`;
+                                // 将 include 链接到通用的 include 目录
+                                await $`sudo ln -sf ../../include ${join(targetProfileDir, 'include')}`;
                             }
+
+                            // 2b. 修复库文件路径 (解决链接错误)
+                            // 下载 NVIDIA 官方的 cudart (aarch64) 并放入 lib 目录
+                            const libDir = join(targetProfileDir, 'lib');
+                            if (!(await exists(libDir))) {
+                                console.log("Patching CUDA: Downloading aarch64 cudart libraries...");
+                                const tmpDir = await Deno.makeTempDir();
+                                // 使用与 CUDA 12.x 兼容的 cudart 版本 (12.8.57)
+                                const cudartUrl = 'https://developer.download.nvidia.com/compute/cuda/redist/cuda_cudart/linux-aarch64/cuda_cudart-linux-aarch64-12.8.57-archive.tar.xz';
+                                const tarPath = join(tmpDir, 'cudart.tar.xz');
+                                
+                                await $`curl -L -o ${tarPath} ${cudartUrl}`;
+                                await $`tar -xf ${tarPath} -C ${tmpDir}`;
+                                
+                                // 提取库文件
+                                const extractedLib = join(tmpDir, 'cuda_cudart-linux-aarch64-12.8.57-archive', 'lib');
+                                await $`sudo mkdir -p ${libDir}`;
+                                await $`sudo cp -r ${extractedLib}/. ${libDir}/`;
+                                
+                                // 清理
+                                await Deno.remove(tmpDir, { recursive: true });
+                            }
+                            
+                            // 告诉 CMake 库文件的位置 (虽然 nvcc 会自动查找 targets/aarch64-linux/lib，但显式指定更安全)
+                            args.push(`-DCMAKE_CUDA_COMPILER_LIBRARY_ROOT=${targetProfileDir}`);
 						}
-					} catch {
-						console.warn("Could not detect nvcc path via 'which nvcc'.");
-                        cudaFlags.push('-I/usr/local/cuda/include');
+					} catch (e) {
+						console.warn("Error patching CUDA environment:", e);
 					}
 				}
 			} else {

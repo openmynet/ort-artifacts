@@ -130,22 +130,46 @@ await new Command()
 						hostCompiler = 'aarch64-linux-gnu-g++'; // Fallback
 					}
 
-					cudaFlags.push('-ccbin', hostCompiler);
+                    // 关键修复 1: 显式设置 CMAKE_CUDA_HOST_COMPILER
+                    // 这样 CMake 在执行链接检查时会使用这个交叉编译器，而不是系统默认的 /usr/bin/g++
+                    args.push(`-DCMAKE_CUDA_HOST_COMPILER=${hostCompiler}`);
 
-					// 2. 关键修复：显式添加 CUDA Include 路径
-					// 交叉编译器通常不知道宿主机 CUDA Toolkit 的位置，导致找不到 cuda_runtime.h
+					// 注意：设置了 CMAKE_CUDA_HOST_COMPILER 后，不需要再手动添加 -ccbin 参数
+
+					// 2. 显式添加 CUDA Include 路径
 					try {
 						const nvccLocation = (await $`which nvcc`.text()).trim();
 						if (nvccLocation) {
-							// 假设路径结构: /.../bin/nvcc -> /.../include
-							// 使用 join(path, '..', '..') 回退两层到安装根目录
 							const cudaIncludePath = join(nvccLocation, '..', '..', 'include');
 							console.log(`Adding CUDA include path: ${cudaIncludePath}`);
 							cudaFlags.push(`-I${cudaIncludePath}`);
+
+                            // 关键修复 2: 尝试解决库路径问题
+                            // 如果是 GitHub Runner 的标准 CUDA 安装，且没有安装 cross-aarch64 包，
+                            // 我们可能只能链接到 stubs (存根)，否则会链接到 x86_64 的库导致错误。
+                            // 但通常我们需要真实的 cross 库。
+                            // 暂时添加 stubs 路径以尝试通过 CMake 检查 (如果目标仅是编译，stubs 足够；如果是运行，则不行)
+                            const cudaStubsPath = join(nvccLocation, '..', '..', 'targets', 'aarch64-linux', 'lib', 'stubs');
+                            // 注意：GitHub Runner 的 cuda-toolkit 可能不包含 aarch64 目标。
+                            // 如果不存在，CMake 可能会报错。这里做一个简单的存在性检查或回退。
+                            
+                            // 检查是否有 aarch64-linux 目录
+                            const cudaCrossTarget = join(nvccLocation, '..', '..', 'targets', 'aarch64-linux', 'lib');
+                            const sbsaTarget = join(nvccLocation, '..', '..', 'targets', 'sbsa-linux', 'lib');
+                            
+                            if (await exists(cudaCrossTarget)) {
+                                args.push(`-DCMAKE_CUDA_COMPILER_LIBRARY_ROOT=${join(nvccLocation, '..', '..', 'targets', 'aarch64-linux')}`);
+                            } else if (await exists(sbsaTarget)) {
+                                 args.push(`-DCMAKE_CUDA_COMPILER_LIBRARY_ROOT=${join(nvccLocation, '..', '..', 'targets', 'sbsa-linux')}`);
+                            } else {
+                                // 如果没有交叉编译库，尝试强制使用 stub 库来通过配置阶段
+                                // 但这在链接阶段可能会有问题。
+                                console.warn("Warning: Could not find CUDA aarch64 libraries. This might fail linking.");
+                            }
 						}
 					} catch {
-						console.warn("Could not detect nvcc path via 'which nvcc'. Assuming /usr/local/cuda/include.");
-						cudaFlags.push('-I/usr/local/cuda/include');
+						console.warn("Could not detect nvcc path via 'which nvcc'.");
+                        cudaFlags.push('-I/usr/local/cuda/include');
 					}
 				}
 			} else {

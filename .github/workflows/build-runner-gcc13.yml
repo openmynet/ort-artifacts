@@ -68,10 +68,26 @@ jobs:
     name: Build ${{ inputs.target }}
     runs-on: ${{ inputs.runs-on }}
     steps:
+      # FIX 1: Dynamically select GCC version for cross-compiler
       - name: Install cross-compile tools
         if: inputs.target == 'aarch64-unknown-linux-gnu' || inputs.target == 'aarch64-linux-android'
+        shell: bash
         run: |
-          sudo apt update && sudo apt install -y gcc make gcc-14-aarch64-linux-gnu g++-14-aarch64-linux-gnu binutils-aarch64-linux-gnu
+          # Default to 14, downgrade to 13 if CUDA is enabled
+          GCC_VER="14"
+          if [[ -n "${{ inputs.cuda-version }}" ]]; then
+            GCC_VER="13"
+          fi
+          
+          echo "Installing aarch64 cross-compiler version: $GCC_VER"
+          
+          sudo apt update
+          sudo apt install -y gcc make gcc-${GCC_VER}-aarch64-linux-gnu g++-${GCC_VER}-aarch64-linux-gnu binutils-aarch64-linux-gnu
+          
+          # Force the generic aarch64-linux-gnu-gcc/g++ commands to point to the installed version
+          # (Especially important if we installed 13, as system defaults might differ)
+          sudo update-alternatives --install /usr/bin/aarch64-linux-gnu-gcc aarch64-linux-gnu-gcc /usr/bin/aarch64-linux-gnu-gcc-${GCC_VER} 100 --slave /usr/bin/aarch64-linux-gnu-g++ aarch64-linux-gnu-g++ /usr/bin/aarch64-linux-gnu-g++-${GCC_VER}
+
       - name: Remove unnecessary software
         if: runner.os == 'Linux'
         run: |
@@ -92,15 +108,14 @@ jobs:
           use-github-cache: false
           # sub-packages: '["nvcc", "cudart", "cublas", "nvrtc"]'
       
-      # FIX START: Install GCC 13 if CUDA is enabled because CUDA 12.6 host config usually requires gcc <= 13
-      - name: Install GCC 13 for CUDA compatibility
+      # FIX 2: Ensure native host GCC is also 13 if CUDA is enabled (for x86 builds or host tools)
+      - name: Install GCC 13 host compiler for CUDA
         if: runner.os == 'Linux' && inputs.cuda-version != ''
         run: |
           sudo apt-get update
           sudo apt-get install -y gcc-13 g++-13
-          # Force system gcc/g++ to use version 13
+          # Set system default gcc/g++ to version 13
           sudo update-alternatives --install /usr/bin/gcc gcc /usr/bin/gcc-13 100 --slave /usr/bin/g++ g++ /usr/bin/g++-13
-      # FIX END
 
       - uses: actions/setup-java@v4
         if: inputs.target == 'aarch64-linux-android'
@@ -144,9 +159,9 @@ jobs:
       - name: Run builder
         env:
           ANDROID_NDK_HOME: ${{ steps.setup-ndk.outputs.ndk-path }}
-          # Explicitly setting CC/CXX as well helps if build scripts ignore system symlinks but respect env vars
-          CC: ${{ (runner.os == 'Linux' && inputs.cuda-version != '') && 'gcc-13' || '' }}
-          CXX: ${{ (runner.os == 'Linux' && inputs.cuda-version != '') && 'g++-13' || '' }}
+          # Explicitly setting CC/CXX helps ensure build scripts use the correct version
+          CC: ${{ (runner.os == 'Linux' && inputs.cuda-version != '') && 'gcc' || '' }}
+          CXX: ${{ (runner.os == 'Linux' && inputs.cuda-version != '') && 'g++' || '' }}
         run: deno run -A src/build.ts -v ${{ inputs.onnxruntime-version }} ${{ inputs.static && '-s' || '' }} ${{ inputs.args }}
       - uses: actions/upload-artifact@v4
         with:

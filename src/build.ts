@@ -101,21 +101,39 @@ await new Command()
 			// new code - 2026/01
 			if (options.arch === 'aarch64') {
 				// Linux Cross-compile (x64 -> aarch64)
-				// 使用 Clang 并显式指定 target，规避找不到 g++ 符号链接的问题
-				const targetFlag = '--target=aarch64-linux-gnu';
+				// 我们移除 Clang 相关的设置，因为工具链文件会强制使用 GCC
 				
-				// 将 target 包含在 CC/CXX 中，确保 CMake 的编译器检查(ABI check)能通过
-				env.CC = `clang-18 ${targetFlag}`;
-				env.CXX = `clang++-18 ${targetFlag}`;
-				
-				// 同时添加到 compilerFlags 确保传递给后续构建
-				compilerFlags.push(targetFlag);
-
 				if (options.cuda) {
-					// 告诉 NVCC 使用 clang++-18 作为 host compiler
-					cudaFlags.push('-ccbin', 'clang++-18');
-					// 关键: 将 target flag 传递给 host compiler，否则 host 代码会编译成 x86_64
-					cudaFlags.push(`-Xcompiler ${targetFlag}`);
+					// 自动探测存在的 aarch64 g++ 编译器版本
+					// GitHub Runner 上通常是 aarch64-linux-gnu-g++-14 或 -13，缺少通用软链接
+					const possibleCompilers = [
+						'aarch64-linux-gnu-g++',    // 尝试通用名
+						'aarch64-linux-gnu-g++-14', // 尝试具体版本 (GCC 14)
+						'aarch64-linux-gnu-g++-13', // 尝试具体版本 (GCC 13)
+						'aarch64-linux-gnu-g++-12',
+						'aarch64-linux-gnu-g++-11',
+					];
+					
+					let hostCompiler = '';
+					
+					for (const compiler of possibleCompilers) {
+						try {
+							// 使用 `which` 命令检查是否存在
+							await $`which ${compiler}`.quiet();
+							hostCompiler = compiler;
+							console.log(`Found CUDA host compiler: ${hostCompiler}`);
+							break;
+						} catch {
+							continue;
+						}
+					}
+
+					if (!hostCompiler) {
+						console.error("Warning: Could not find aarch64-linux-gnu-g++ or versioned alternatives. CUDA build may fail.");
+						hostCompiler = 'aarch64-linux-gnu-g++'; // Fallback
+					}
+
+					cudaFlags.push('-ccbin', hostCompiler);
 				}
 			} else {
 				// Linux Native (x64)

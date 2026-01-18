@@ -101,11 +101,9 @@ await new Command()
 			// new code - 2026/01
 			if (options.arch === 'aarch64') {
 				// Linux Cross-compile (x64 -> aarch64)
-				// 我们移除 Clang 相关的设置，因为工具链文件会强制使用 GCC
 				
 				if (options.cuda) {
-					// 自动探测存在的 aarch64 g++ 编译器版本
-					// GitHub Runner 上通常是 aarch64-linux-gnu-g++-14 或 -13，缺少通用软链接
+					// 1. 自动探测存在的 aarch64 g++ 编译器版本
 					const possibleCompilers = [
 						'aarch64-linux-gnu-g++',    // 尝试通用名
 						'aarch64-linux-gnu-g++-14', // 尝试具体版本 (GCC 14)
@@ -118,7 +116,6 @@ await new Command()
 					
 					for (const compiler of possibleCompilers) {
 						try {
-							// 使用 `which` 命令检查是否存在
 							await $`which ${compiler}`.quiet();
 							hostCompiler = compiler;
 							console.log(`Found CUDA host compiler: ${hostCompiler}`);
@@ -134,6 +131,22 @@ await new Command()
 					}
 
 					cudaFlags.push('-ccbin', hostCompiler);
+
+					// 2. 关键修复：显式添加 CUDA Include 路径
+					// 交叉编译器通常不知道宿主机 CUDA Toolkit 的位置，导致找不到 cuda_runtime.h
+					try {
+						const nvccLocation = (await $`which nvcc`.text()).trim();
+						if (nvccLocation) {
+							// 假设路径结构: /.../bin/nvcc -> /.../include
+							// 使用 join(path, '..', '..') 回退两层到安装根目录
+							const cudaIncludePath = join(nvccLocation, '..', '..', 'include');
+							console.log(`Adding CUDA include path: ${cudaIncludePath}`);
+							cudaFlags.push(`-I${cudaIncludePath}`);
+						}
+					} catch {
+						console.warn("Could not detect nvcc path via 'which nvcc'. Assuming /usr/local/cuda/include.");
+						cudaFlags.push('-I/usr/local/cuda/include');
+					}
 				}
 			} else {
 				// Linux Native (x64)

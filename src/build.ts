@@ -234,6 +234,11 @@ await new Command()
 					case 'linux':
 						if (!options.android) {
 							args.push(`-DCMAKE_TOOLCHAIN_FILE=${join(root, 'toolchains', 'aarch64-unknown-linux-gnu.cmake')}`);
+							// FIX: 强制使用 lld 链接器，避免使用默认的 x86_64 ld
+							const linkFlags = '-fuse-ld=lld';
+							args.push(`-DCMAKE_SHARED_LINKER_FLAGS=${linkFlags}`);
+							args.push(`-DCMAKE_MODULE_LINKER_FLAGS=${linkFlags}`);
+							args.push(`-DCMAKE_EXE_LINKER_FLAGS=${linkFlags}`);
 						}
 						break;
 				}

@@ -265,6 +265,14 @@ await new Command()
               args.push(`-DCMAKE_LIBRARY_PATH=${libDir}`);
               // 防止链接到 x86_64 的 lib64 目录
               args.push(`-DCMAKE_IGNORE_PATH=/usr/local/cuda-12.8/lib64`);
+              
+              // 强制链接器使用 aarch64 库路径，覆盖 CMake CUDA 隐式目录
+              // 这是解决 "file in wrong format" 错误的关键
+              const cudnnLibDir = join(root, "cudnn", "lib");
+              const linkerFlags = `-L${libDir} -L${libDir}/stubs -Wl,-rpath-link,${libDir} -Wl,-rpath-link,${cudnnLibDir}`;
+              args.push(`-DCMAKE_SHARED_LINKER_FLAGS=${linkerFlags}`);
+              args.push(`-DCMAKE_MODULE_LINKER_FLAGS=${linkerFlags}`);
+              args.push(`-DCMAKE_EXE_LINKER_FLAGS=${linkerFlags}`);
             }
           } catch (e) {
             console.warn("Error patching CUDA environment:", e);

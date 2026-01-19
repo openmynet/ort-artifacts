@@ -130,10 +130,27 @@ await new Command()
 						console.error("Warning: Could not find aarch64-linux-gnu-g++. CUDA build may fail.");
 						hostCompiler = 'aarch64-linux-gnu-g++';
 					}
-					// [NEW] 如果检测到 gcc-13，切换 toolchain 文件
-					if (hostCompiler.includes('g++-13')) {
+					// [FIX] 严格检查版本：如果名称不带版本号，则运行命令检查是否为 GCC 13
+					let isGcc13 = hostCompiler.includes('g++-13');
+					if (!isGcc13 && hostCompiler) {
+						try {
+							const versionOut = await $`${hostCompiler} --version`.text();
+							// 检查输出中是否包含 " 13." (例如 "g++ (Ubuntu ...) 13.x.x")
+							if (versionOut.includes(' 13.') || versionOut.includes(') 13.')) {
+								isGcc13 = true;
+								console.log(`Verified ${hostCompiler} is GCC 13`);
+							}
+						} catch (e) {
+							console.warn("Failed to check compiler version:", e);
+						}
+					}
+
+					// 如果确认是 GCC 13，切换到强制指定 gcc-13 的 toolchain 文件
+					if (isGcc13) {
+						console.log("Using GCC 13 toolchain file.");
 						crossToolchainFile = 'aarch64-unknown-linux-gnu-gcc13.cmake';
 					}
+					
                     // 设置 CMake 变量以使用正确的宿主编译器进行链接
                     args.push(`-DCMAKE_CUDA_HOST_COMPILER=${hostCompiler}`);
 

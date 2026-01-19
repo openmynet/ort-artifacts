@@ -171,29 +171,59 @@ await new Command()
                             }
 
                             // 2b. 修复库文件路径 (解决链接错误)
-                            // 下载 NVIDIA 官方的 cudart (aarch64) 并放入 lib 目录
+                            // 下载 NVIDIA 官方的 aarch64 库并放入 lib 目录
+                            // 必须包含: cudart, cublas, cufft, curand
                             const libDir = join(targetProfileDir, 'lib');
                             if (!(await exists(libDir))) {
-                                console.log("Patching CUDA: Downloading aarch64 cudart libraries...");
-                                const tmpDir = await Deno.makeTempDir();
-                                // 使用与 CUDA 12.x 兼容的 cudart 版本 (12.8.57)
-                                const cudartUrl = 'https://developer.download.nvidia.com/compute/cuda/redist/cuda_cudart/linux-aarch64/cuda_cudart-linux-aarch64-12.8.57-archive.tar.xz';
-                                const tarPath = join(tmpDir, 'cudart.tar.xz');
-                                
-                                await $`curl -L -o ${tarPath} ${cudartUrl}`;
-                                await $`tar -xf ${tarPath} -C ${tmpDir}`;
-                                
-                                // 提取库文件
-                                const extractedLib = join(tmpDir, 'cuda_cudart-linux-aarch64-12.8.57-archive', 'lib');
+                                console.log("Patching CUDA: Downloading aarch64 libraries (cudart, cublas, cufft, curand)...");
                                 await $`sudo mkdir -p ${libDir}`;
-                                await $`sudo cp -r ${extractedLib}/. ${libDir}/`;
+                                const tmpDir = await Deno.makeTempDir();
+
+                                // Define required libraries compatible with CUDA 12.x
+                                const libsToDownload = [
+                                    {
+                                        name: 'cuda_cudart',
+                                        url: 'https://developer.download.nvidia.com/compute/cuda/redist/cuda_cudart/linux-aarch64/cuda_cudart-linux-aarch64-12.8.57-archive.tar.xz',
+                                        extractSubDir: 'cuda_cudart-linux-aarch64-12.8.57-archive/lib'
+                                    },
+                                    {
+                                        name: 'libcublas',
+                                        url: 'https://developer.download.nvidia.com/compute/cuda/redist/libcublas/linux-aarch64/libcublas-linux-aarch64-12.8.3.14-archive.tar.xz',
+                                        extractSubDir: 'libcublas-linux-aarch64-12.8.3.14-archive/lib'
+                                    },
+                                    {
+                                        name: 'libcufft',
+                                        url: 'https://developer.download.nvidia.com/compute/cuda/redist/libcufft/linux-aarch64/libcufft-linux-aarch64-11.3.3.41-archive.tar.xz',
+                                        extractSubDir: 'libcufft-linux-aarch64-11.3.3.41-archive/lib'
+                                    },
+                                    {
+                                        name: 'libcurand',
+                                        url: 'https://developer.download.nvidia.com/compute/cuda/redist/libcurand/linux-aarch64/libcurand-linux-aarch64-10.3.9.55-archive.tar.xz',
+                                        extractSubDir: 'libcurand-linux-aarch64-10.3.9.55-archive/lib'
+                                    }
+                                ];
+
+                                for (const lib of libsToDownload) {
+                                    console.log(`Downloading ${lib.name}...`);
+                                    const tarPath = join(tmpDir, `${lib.name}.tar.xz`);
+                                    await $`curl -L -o ${tarPath} ${lib.url}`.quiet();
+                                    await $`tar -xf ${tarPath} -C ${tmpDir}`;
+                                    
+                                    const extractedLibDir = join(tmpDir, lib.extractSubDir);
+                                    // Copy contents to target lib dir
+                                    // Note: Using 'cp -P' to preserve symlinks is important for .so versioning
+                                    await $`sudo cp -P -r ${extractedLibDir}/. ${libDir}/`;
+                                }
                                 
                                 // 清理
                                 await Deno.remove(tmpDir, { recursive: true });
                             }
                             
-                            // 告诉 CMake 库文件的位置 (虽然 nvcc 会自动查找 targets/aarch64-linux/lib，但显式指定更安全)
+                            // 告诉 CMake 库文件的位置
+                            // CMAKE_CUDA_COMPILER_LIBRARY_ROOT helps nvcc implicit link
                             args.push(`-DCMAKE_CUDA_COMPILER_LIBRARY_ROOT=${targetProfileDir}`);
+                            // CUDAToolkit_ROOT helps CMake FindCUDAToolkit locate the targets/aarch64-linux folder
+                            args.push(`-DCUDAToolkit_ROOT=${cudaPath}`);
 						}
 					} catch (e) {
 						console.warn("Error patching CUDA environment:", e);

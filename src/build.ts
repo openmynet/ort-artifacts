@@ -4,7 +4,7 @@ import { join } from 'https://deno.land/std@0.224.0/path/mod.ts';
 import { arch as getArch, cpus, platform as getPlatform } from 'node:os';
 
 import { Command, EnumType } from '@cliffy/command';
-import $ from '@david/dax';
+import $from '@david/dax';
 
 const arch = getArch() as 'x64' | 'arm64';
 const platform = getPlatform() as 'win32' | 'darwin' | 'linux';
@@ -56,8 +56,7 @@ await new Command()
 		const onnxruntimeRoot = join(root, 'onnxruntime');
 		const isExists = await exists(onnxruntimeRoot)
 		let isBranchCorrect = false;
-		if (isExists) {
-			$.cd(onnxruntimeRoot);
+		if (isExists) {$.cd(onnxruntimeRoot);
 			const currentBranch = (await $`git branch --show-current`.stdout("piped")).stdout.trim()
 			isBranchCorrect = currentBranch === `rel-${options.upstreamVersion}`;
 			$.cd(root);
@@ -90,24 +89,16 @@ await new Command()
 		const args = [];
 		const compilerFlags = [];
 		const cudaFlags: string[] = [];
-		// [NEW] 定义默认 toolchain 文件名
 		let crossToolchainFile = 'aarch64-unknown-linux-gnu.cmake';
 		
 		if (platform === 'linux' && !options.android) {
-			// env.CC = 'clang-18';
-			// env.CXX = 'clang++-18';
-			// if (options.cuda) {
-			// 	cudaFlags.push('-ccbin', 'clang++-18');
-			// }
-
-			// new code - 2026/01
 			if (options.arch === 'aarch64') {
 				// Linux Cross-compile (x64 -> aarch64)
 				
 				if (options.cuda) {
 					// 1. 自动探测存在的 aarch64 g++ 编译器版本
 					const possibleCompilers = [
-						'aarch64-linux-gnu-g++',    // 尝试通用名
+						'aarch64-linux-gnu-g++',
 						'aarch64-linux-gnu-g++-11',
 						'aarch64-linux-gnu-g++-12',
 						'aarch64-linux-gnu-g++-13',
@@ -130,12 +121,11 @@ await new Command()
 						console.error("Warning: Could not find aarch64-linux-gnu-g++. CUDA build may fail.");
 						hostCompiler = 'aarch64-linux-gnu-g++';
 					}
-					// [FIX] 严格检查版本：如果名称不带版本号，则运行命令检查是否为 GCC 13
+					
 					let isGcc13 = hostCompiler.includes('g++-13');
 					if (!isGcc13 && hostCompiler) {
 						try {
 							const versionOut = await $`${hostCompiler} --version`.text();
-							// 检查输出中是否包含 " 13." (例如 "g++ (Ubuntu ...) 13.x.x")
 							if (versionOut.includes(' 13.') || versionOut.includes(') 13.')) {
 								isGcc13 = true;
 								console.log(`Verified ${hostCompiler} is GCC 13`);
@@ -145,41 +135,35 @@ await new Command()
 						}
 					}
 
-					// 如果确认是 GCC 13，切换到强制指定 gcc-13 的 toolchain 文件
 					if (isGcc13) {
 						console.log("Using GCC 13 toolchain file.");
 						crossToolchainFile = 'aarch64-unknown-linux-gnu-gcc13.cmake';
 					}
 					
-                    // 设置 CMake 变量以使用正确的宿主编译器进行链接
                     args.push(`-DCMAKE_CUDA_HOST_COMPILER=${hostCompiler}`);
 
-					// 2. 关键修复：修补 CUDA 安装以支持交叉编译
-                    // GitHub Runner 的 CUDA 通常缺少 targets/aarch64-linux 目录
+					// 2. 修补 CUDA 安装以支持交叉编译
 					try {
 						const nvccPath = (await $`which nvcc`.text()).trim();
 						if (nvccPath) {
                             const cudaPath = join(nvccPath, '..', '..');
                             const targetProfileDir = join(cudaPath, 'targets', 'aarch64-linux');
                             
-                            // 2a. 修复头文件路径 (解决 fatal error: cuda_runtime.h: No such file)
+                            // 2a. 修复头文件路径
                             if (!(await exists(join(targetProfileDir, 'include')))) {
                                 console.log("Patching CUDA: Creating target include directory symlink...");
                                 await $`sudo mkdir -p ${targetProfileDir}`;
-                                // 将 include 链接到通用的 include 目录
                                 await $`sudo ln -sf ../../include ${join(targetProfileDir, 'include')}`;
                             }
 
-                            // 2b. 修复库文件路径 (解决链接错误)
-                            // 下载 NVIDIA 官方的 aarch64 库并放入 lib 目录
-                            // 必须包含: cudart, cublas, cufft, curand
+                            // 2b. 修复库文件路径 - 下载 aarch64 版本的 CUDA 库
                             const libDir = join(targetProfileDir, 'lib');
                             if (!(await exists(libDir))) {
-                                console.log("Patching CUDA: Downloading aarch64 libraries (cudart, cublas, cufft, curand)...");
+                                console.log("Patching CUDA: Downloading aarch64 libraries...");
                                 await $`sudo mkdir -p ${libDir}`;
                                 const tmpDir = await Deno.makeTempDir();
 
-                                // Define required libraries compatible with CUDA 12.x
+                                // 完整的 CUDA 库列表（包含 cublasLt）
                                 const libsToDownload = [
                                     {
                                         name: 'cuda_cudart',
@@ -210,20 +194,37 @@ await new Command()
                                     await $`tar -xf ${tarPath} -C ${tmpDir}`;
                                     
                                     const extractedLibDir = join(tmpDir, lib.extractSubDir);
-                                    // Copy contents to target lib dir
-                                    // Note: Using 'cp -P' to preserve symlinks is important for .so versioning
                                     await $`sudo cp -P -r ${extractedLibDir}/. ${libDir}/`;
                                 }
                                 
-                                // 清理
+                                // 创建 stubs 目录的符号链接（如果不存在）
+                                const stubsDir = join(targetProfileDir, 'lib', 'stubs');
+                                if (!(await exists(stubsDir))) {
+                                    await $`sudo mkdir -p ${stubsDir}`;
+                                    // 复制 stub 库（用于链接时）
+                                    for (const lib of libsToDownload) {
+                                        const extractedStubsDir = join(tmpDir, lib.extractSubDir.replace('/lib', '/lib/stubs'));
+                                        try {
+                                            const stubsExist = await exists(extractedStubsDir);
+                                            if (stubsExist) {
+                                                await $`sudo cp -P -r ${extractedStubsDir}/. ${stubsDir}/`;
+                                            }
+                                        } catch {
+                                            // stubs 目录可能不存在，忽略
+                                        }
+                                    }
+                                }
+                                
                                 await Deno.remove(tmpDir, { recursive: true });
                             }
                             
-                            // 告诉 CMake 库文件的位置
-                            // CMAKE_CUDA_COMPILER_LIBRARY_ROOT helps nvcc implicit link
+                            // 关键修复：设置正确的库搜索路径，防止链接到 x86_64 版本
                             args.push(`-DCMAKE_CUDA_COMPILER_LIBRARY_ROOT=${targetProfileDir}`);
-                            // CUDAToolkit_ROOT helps CMake FindCUDAToolkit locate the targets/aarch64-linux folder
                             args.push(`-DCUDAToolkit_ROOT=${cudaPath}`);
+                            // 强制指定 aarch64 库目录
+                            args.push(`-DCUDAToolkit_LIBRARY_DIR=${libDir}`);
+                            // 设置链接器搜索路径
+                            args.push(`-DCMAKE_LIBRARY_PATH=${libDir}`);
 						}
 					} catch (e) {
 						console.warn("Error patching CUDA environment:", e);
@@ -237,8 +238,6 @@ await new Command()
 					cudaFlags.push('-ccbin', 'clang++-18');
 				}
 			}
-			// new ode -end-
-			
 		} else if (platform === 'win32') {
 			args.push('-G', 'Visual Studio 17 2022');
 			if (options.arch === 'x86_64') {
@@ -259,7 +258,6 @@ await new Command()
 
 		// Build for Android on Linux.
 		if (platform === 'linux' && options.android) {
-			// ANDROID_NDK_HOME and ANDROID_SDK_ROOT are expected to be set in the environment.
 			args.push(`-DANDROID_PLATFORM=android-${Deno.env.get("ANDROID_API")}`);
 			args.push('-DANDROID_ABI=arm64-v8a');
 			args.push('-DANDROID_USE_LEGACY_TOOLCHAIN_FILE=false');
@@ -268,13 +266,11 @@ await new Command()
 
 		if (options.cuda) {
 			args.push('-Donnxruntime_USE_CUDA=ON');
-			// https://github.com/microsoft/onnxruntime/pull/20768
 			args.push('-Donnxruntime_NVCC_THREADS=1');
 
 			const cudnnOutPath = join(root, 'cudnn');
 			let should_skip = await exists(cudnnOutPath);
 			if (should_skip) {
-				// Check dir whether is empty
 				const files = await Array.fromAsync(Deno.readDir(cudnnOutPath));
 				if (files.length === 0) {
 					await $`rm -rf ${cudnnOutPath}`;
@@ -292,7 +288,6 @@ await new Command()
 			args.push(`-Donnxruntime_CUDNN_HOME=${cudnnOutPath}`);
 
 			if (platform === 'win32') {
-				// nvcc < 12.4 throws an error with VS 17.10
 				cudaFlags.push('-allow-unsupported-compiler');
 			}
 		}
@@ -353,7 +348,6 @@ await new Command()
 			args.push('-Donnxruntime_USE_OPENVINO_CPU=ON');
 			args.push('-Donnxruntime_USE_OPENVINO_GPU=ON');
 			args.push('-Donnxruntime_USE_OPENVINO_NPU=ON');
-			// args.push('-Donnxruntime_USE_OPENVINO_INTERFACE=ON');
 		}
 		if(options.nnapi) {
 			args.push('-Donnxruntime_USE_NNAPI_BUILTIN=ON');
@@ -408,7 +402,6 @@ await new Command()
 			}
 		}
 
-		// https://github.com/microsoft/onnxruntime/pull/21005
 		if (platform === 'win32') {
 			compilerFlags.push('-D_DISABLE_CONSTEXPR_MUTEX_CONSTRUCTOR');
 		}
@@ -423,7 +416,6 @@ await new Command()
 					compilerFlags.push('-march=x86-64-v3');
 					break;
 				case 'win32':
-					// compilerFlags.push('/arch:AVX2');
 					compilerFlags.push('-march=x86-64-v3');
 					break;
 			}

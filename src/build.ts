@@ -90,7 +90,9 @@ await new Command()
 		const args = [];
 		const compilerFlags = [];
 		const cudaFlags: string[] = [];
-
+		// [NEW] 定义默认 toolchain 文件名
+		let crossToolchainFile = 'aarch64-unknown-linux-gnu.cmake';
+		
 		if (platform === 'linux' && !options.android) {
 			// env.CC = 'clang-18';
 			// env.CXX = 'clang++-18';
@@ -128,7 +130,10 @@ await new Command()
 						console.error("Warning: Could not find aarch64-linux-gnu-g++. CUDA build may fail.");
 						hostCompiler = 'aarch64-linux-gnu-g++';
 					}
-
+					// [NEW] 如果检测到 gcc-13，切换 toolchain 文件
+					if (hostCompiler.includes('g++-13')) {
+						crossToolchainFile = 'aarch64-unknown-linux-gnu-gcc13.cmake';
+					}
                     // 设置 CMake 变量以使用正确的宿主编译器进行链接
                     args.push(`-DCMAKE_CUDA_HOST_COMPILER=${hostCompiler}`);
 
@@ -323,7 +328,7 @@ await new Command()
 						break;
 					case 'linux':
 						if (!options.android) {
-							args.push(`-DCMAKE_TOOLCHAIN_FILE=${join(root, 'toolchains', 'aarch64-unknown-linux-gnu.cmake')}`);
+							args.push(`-DCMAKE_TOOLCHAIN_FILE=${join(root, 'toolchains', crossToolchainFile)}`);
 						}
 						break;
 				}

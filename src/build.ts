@@ -261,18 +261,30 @@ await new Command()
               args.push(`-DCUDAToolkit_ROOT=${cudaPath}`);
               // 强制指定 aarch64 库目录
               args.push(`-DCUDAToolkit_LIBRARY_DIR=${libDir}`);
-              // 设置链接器搜索路径（优先使用 aarch64 库）
-              args.push(`-DCMAKE_LIBRARY_PATH=${libDir}`);
-              // 防止链接到 x86_64 的 lib64 目录
-              args.push(`-DCMAKE_IGNORE_PATH=/usr/local/cuda-12.8/lib64`);
-              
-              // 强制链接器使用 aarch64 库路径，覆盖 CMake CUDA 隐式目录
-              // 这是解决 "file in wrong format" 错误的关键
+
+              // ===== 核心修复：防止链接到 x86_64 库 =====
+              // 1. 设置 CMAKE_FIND_ROOT_PATH 强制 find_library 只在 aarch64 目录搜索
+              args.push(`-DCMAKE_FIND_ROOT_PATH=${targetProfileDir}`);
+
+              // 2. 设置 CMAKE_LIBRARY_PATH 作为库搜索的优先路径
+              args.push(`-DCMAKE_LIBRARY_PATH=${libDir};${libDir}/stubs`);
+
+              // 3. CMAKE_IGNORE_PATH 排除 x86_64 的库目录
+              args.push(`-DCMAKE_IGNORE_PATH=${cudaPath}/lib64`);
+
+              // 4. 清除 CUDA 隐式链接目录，这是防止 CMake 自动添加 x86_64 目录的关键
+              // CMake 的 CUDA 模块会自动添加隐式目录，必须清除它们
+              args.push(`-DCMAKE_CUDA_IMPLICIT_LINK_DIRECTORIES=`);
+
+              // 5. 设置链接器标志，确保链接器使用正确的库路径
               const cudnnLibDir = join(root, "cudnn", "lib");
               const linkerFlags = `-L${libDir} -L${libDir}/stubs -Wl,-rpath-link,${libDir} -Wl,-rpath-link,${cudnnLibDir}`;
               args.push(`-DCMAKE_SHARED_LINKER_FLAGS=${linkerFlags}`);
               args.push(`-DCMAKE_MODULE_LINKER_FLAGS=${linkerFlags}`);
               args.push(`-DCMAKE_EXE_LINKER_FLAGS=${linkerFlags}`);
+
+              // 6. 记录 aarch64 库目录供后续使用
+              env.CUDA_AARCH64_LIB_PATH = libDir;
             }
           } catch (e) {
             console.warn("Error patching CUDA environment:", e);

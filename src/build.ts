@@ -4,7 +4,7 @@ import { join } from 'https://deno.land/std@0.224.0/path/mod.ts';
 import { arch as getArch, cpus, platform as getPlatform } from 'node:os';
 
 import { Command, EnumType } from '@cliffy/command';
-import $from '@david/dax';
+import $ from '@david/dax';
 
 const arch = getArch() as 'x64' | 'arm64';
 const platform = getPlatform() as 'win32' | 'darwin' | 'linux';

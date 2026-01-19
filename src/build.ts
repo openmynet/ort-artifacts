@@ -212,6 +212,12 @@ await new Command()
                     extractSubDir:
                       "libcurand-linux-aarch64-10.3.9.55-archive/lib",
                   },
+                  {
+                    name: "cuda_nvrtc",
+                    url: "https://developer.download.nvidia.com/compute/cuda/redist/cuda_nvrtc/linux-aarch64/cuda_nvrtc-linux-aarch64-12.8.93-archive.tar.xz",
+                    extractSubDir:
+                      "cuda_nvrtc-linux-aarch64-12.8.93-archive/lib",
+                  },
                 ];
 
                 for (const lib of libsToDownload) {
@@ -255,8 +261,10 @@ await new Command()
               args.push(`-DCUDAToolkit_ROOT=${cudaPath}`);
               // 强制指定 aarch64 库目录
               args.push(`-DCUDAToolkit_LIBRARY_DIR=${libDir}`);
-              // 设置链接器搜索路径
+              // 设置链接器搜索路径（优先使用 aarch64 库）
               args.push(`-DCMAKE_LIBRARY_PATH=${libDir}`);
+              // 防止链接到 x86_64 的 lib64 目录
+              args.push(`-DCMAKE_IGNORE_PATH=/usr/local/cuda-12.8/lib64`);
             }
           } catch (e) {
             console.warn("Error patching CUDA environment:", e);

@@ -1,0 +1,84 @@
+name: Build All Targets Origin
+
+on:
+  workflow_dispatch:
+    inputs:
+      onnxruntime-version:
+        type: string
+        description: "ONNX Runtime version (e.g. 1.18.0)"
+        required: true
+
+jobs:
+  build:
+    uses: ./.github/workflows/build-runner-origin.yml
+
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - target: aarch64-unknown-linux-gnu
+            args: "-A aarch64 --xnnpack -N"
+            static: true
+            feature-set: none
+            runs-on: ubuntu-24.04
+          - target: aarch64-unknown-linux-gnu
+            args: "-A aarch64 --xnnpack -N"
+            static: false
+            feature-set: none
+            runs-on: ubuntu-24.04
+
+          - target: aarch64-unknown-linux-gnu
+            args: "-A aarch64 --webgpu --xnnpack -N"
+            static: true
+            feature-set: wgpu
+            runs-on: ubuntu-24.04
+          - target: aarch64-unknown-linux-gnu
+            args: "-A aarch64 --webgpu --xnnpack -N"
+            static: false
+            feature-set: wgpu
+            runs-on: ubuntu-24.04
+
+          - target: x86_64-unknown-linux-gnu
+            args: "--xnnpack -N"
+            static: true
+            feature-set: none
+            runs-on: ubuntu-24.04
+          - target: x86_64-unknown-linux-gnu
+            args: "--xnnpack -N"
+            static: false
+            feature-set: none
+            runs-on: ubuntu-24.04
+
+          - target: x86_64-unknown-linux-gnu
+            args: "--webgpu --xnnpack -N"
+            static: true
+            feature-set: wgpu
+            runs-on: ubuntu-24.04
+          - target: x86_64-unknown-linux-gnu
+            args: "--webgpu --xnnpack -N"
+            static: false
+            feature-set: wgpu
+            runs-on: ubuntu-24.04
+
+          - target: x86_64-unknown-linux-gnu
+            args: "--cuda --trt -N"
+            static: true
+            feature-set: cu12
+            cuda-version: "12.8.1"
+            runs-on: ubuntu-24.04
+          - target: x86_64-unknown-linux-gnu
+            args: "--cuda --trt -N"
+            static: false
+            feature-set: cu12
+            cuda-version: "12.8.1"
+            runs-on: ubuntu-24.04
+
+
+    with:
+      onnxruntime-version: ${{ inputs.onnxruntime-version }}
+      target: ${{ matrix.target }}
+      args: ${{ matrix.args }}
+      static: ${{ matrix.static }}
+      feature-set: ${{ matrix.feature-set }}
+      cuda-version: ${{ matrix.cuda-version }}
+      runs-on: ${{ matrix.runs-on }}

@@ -263,11 +263,16 @@ await new Command()
               args.push(`-DCUDAToolkit_LIBRARY_DIR=${libDir}`);
 
               // ===== 核心修复：防止链接到 x86_64 库 =====
-              // 1. 设置 CMAKE_FIND_ROOT_PATH 强制 find_library 只在 aarch64 目录搜索
-              args.push(`-DCMAKE_FIND_ROOT_PATH=${targetProfileDir}`);
+              // cuDNN 路径（用于 CMAKE_FIND_ROOT_PATH）
+              const cudnnOutPath = join(root, "cudnn");
+              const cudnnLibDir = join(cudnnOutPath, "lib");
+
+              // 1. 设置 CMAKE_FIND_ROOT_PATH，包含 CUDA aarch64 目录和 cuDNN 目录
+              // 这样 find_path 和 find_library 才能在这两个目录中搜索
+              args.push(`-DCMAKE_FIND_ROOT_PATH=${targetProfileDir};${cudnnOutPath}`);
 
               // 2. 设置 CMAKE_LIBRARY_PATH 作为库搜索的优先路径
-              args.push(`-DCMAKE_LIBRARY_PATH=${libDir};${libDir}/stubs`);
+              args.push(`-DCMAKE_LIBRARY_PATH=${libDir};${libDir}/stubs;${cudnnLibDir}`);
 
               // 3. CMAKE_IGNORE_PATH 排除 x86_64 的库目录
               args.push(`-DCMAKE_IGNORE_PATH=${cudaPath}/lib64`);
@@ -277,7 +282,6 @@ await new Command()
               args.push(`-DCMAKE_CUDA_IMPLICIT_LINK_DIRECTORIES=`);
 
               // 5. 设置链接器标志，确保链接器使用正确的库路径
-              const cudnnLibDir = join(root, "cudnn", "lib");
               const linkerFlags = `-L${libDir} -L${libDir}/stubs -Wl,-rpath-link,${libDir} -Wl,-rpath-link,${cudnnLibDir}`;
               args.push(`-DCMAKE_SHARED_LINKER_FLAGS=${linkerFlags}`);
               args.push(`-DCMAKE_MODULE_LINKER_FLAGS=${linkerFlags}`);

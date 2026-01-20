@@ -1,0 +1,143 @@
+name: Build All Targets Origin
+
+on:
+  workflow_dispatch:
+    inputs:
+      onnxruntime-version:
+        type: string
+        description: "ONNX Runtime version (e.g. 1.18.0)"
+        required: true
+
+jobs:
+  build:
+    uses: ./.github/workflows/build-runner-origin.yml
+
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          # - target: aarch64-unknown-linux-gnu
+          #   args: "-t -A aarch64 --xnnpack -N"
+          #   static: true
+          #   feature-set: train
+          #   runs-on: ubuntu-24.04
+          # - target: x86_64-unknown-linux-gnu
+          #   args: "-t --xnnpack -N"
+          #   static: true
+          #   feature-set: train
+          #   runs-on: ubuntu-24.04
+          # - target: x86_64-unknown-linux-gnu
+          #   args: "-t --cuda --trt -N"
+          #   static: true
+          #   feature-set: train,cu12
+          #   cuda-version: '12.8.1'
+          #   runs-on: ubuntu-24.04
+          # - target: aarch64-apple-darwin
+          #   args: "-t --coreml -A aarch64 --xnnpack -N"
+          #   static: true
+          #   feature-set: train
+          #   runs-on: macos-15
+          # - target: x86_64-pc-windows-msvc
+          #   args: "-t --directml --cuda --trt --xnnpack"
+          #   static: true
+          #   feature-set: train,cu12
+          #   cuda-version: '12.8.1'
+          #   runs-on: windows-2022
+          # - target: aarch64-pc-windows-msvc
+          #   args: "-t -A aarch64 --directml"
+          #   static: true
+          #   feature-set: train
+          #   runs-on: windows-2022
+          # - target: x86_64-pc-windows-msvc
+          #   args: "-t --directml --xnnpack"
+          #   static: true
+          #   feature-set: train
+          #   runs-on: windows-2022
+          # - target: x86_64-apple-darwin
+          #   args: "--coreml -A aarch64 --xnnpack -N"
+          #   static: true
+          #   feature-set: none
+          #   runs-on: macos-15-intel
+          - target: aarch64-unknown-linux-gnu
+            args: "-A aarch64 --xnnpack -N"
+            static: true
+            feature-set: none
+            runs-on: ubuntu-24.04
+          - target: x86_64-unknown-linux-gnu
+            args: "--xnnpack -N"
+            static: true
+            feature-set: none
+            runs-on: ubuntu-24.04
+          - target: x86_64-unknown-linux-gnu
+            args: "--cuda --trt -N"
+            static: true
+            feature-set: cu12
+            cuda-version: "12.8.1"
+            runs-on: ubuntu-24.04
+          - target: x86_64-unknown-linux-gnu
+            args: "--webgpu -N"
+            static: true
+            feature-set: wgpu
+            runs-on: ubuntu-24.04
+          - target: aarch64-apple-darwin
+            args: "--coreml -A aarch64 --xnnpack -N"
+            static: true
+            feature-set: none
+            runs-on: macos-15
+          - target: x86_64-pc-windows-msvc
+            args: "--directml --cuda --trt --xnnpack"
+            static: true
+            feature-set: cu12
+            cuda-version: "12.8.1"
+            runs-on: windows-2022
+          - target: x86_64-pc-windows-msvc
+            args: "--webgpu"
+            static: true
+            feature-set: wgpu
+            runs-on: windows-2025
+          - target: aarch64-pc-windows-msvc
+            args: "-A aarch64 --directml"
+            static: true
+            feature-set: none
+            runs-on: windows-2022
+          - target: x86_64-pc-windows-msvc
+            args: "--directml --xnnpack"
+            static: true
+            feature-set: none
+            runs-on: windows-2022
+          - target: aarch64-apple-ios
+            args: "-A aarch64 --iphoneos --xnnpack --coreml -N"
+            static: true
+            feature-set: none
+            runs-on: macos-15
+          - target: aarch64-apple-ios-sim
+            args: "-A aarch64 --iphonesimulator --xnnpack --coreml -N"
+            static: true
+            feature-set: none
+            runs-on: macos-15
+          - target: aarch64-linux-android
+            args: "-A aarch64 --android --xnnpack --nnapi -N"
+            static: true
+            feature-set: none
+            runs-on: ubuntu-24.04
+          - target: x86_64-unknown-linux-gnu
+            args: "--nvrtx -N"
+            static: true
+            feature-set: nvrtx
+            cuda-version: "12.9.0"
+            runs-on: ubuntu-24.04
+          - target: x86_64-pc-windows-msvc
+            args: "--nvrtx"
+            static: true
+            feature-set: nvrtx
+            cuda-version: "12.9.0"
+            runs-on: windows-2022
+
+    with:
+      onnxruntime-version: ${{ inputs.onnxruntime-version }}
+      target: ${{ matrix.target }}
+      args: ${{ matrix.args }}
+      static: ${{ matrix.static }}
+      feature-set: ${{ matrix.feature-set }}
+      cuda-version: ${{ matrix.cuda-version }}
+      runs-on: ${{ matrix.runs-on }}

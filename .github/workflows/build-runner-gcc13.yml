@@ -73,24 +73,43 @@ jobs:
         if: inputs.target == 'aarch64-unknown-linux-gnu' || inputs.target == 'aarch64-linux-android'
         shell: bash
         run: |
-          # 如果是 Ubuntu 22.04，添加 PPA 源以获取更高版本的 GCC
-          if [[ "$(lsb_release -rs)" == "22.04" ]]; then
-            sudo add-apt-repository -y ppa:ubuntu-toolchain-r/test
+          IS_2204=false
+          if [[ "$(lsb_release -rs)" == "22.04" ]]; then IS_2204=true; fi
+          if [ "$IS_2204" = true ]; then
+            echo "Ubuntu 22.04 detected. Manually downloading Arm GNU Toolchain 13.2..."
+            
+            mkdir -p $HOME/toolchains
+            cd $HOME/toolchains
+            
+            # 下载 Arm 官方工具链
+            wget -q https://developer.arm.com/-/media/Files/downloads/gnu/13.2.rel1/binrel/arm-gnu-toolchain-13.2.rel1-x86_64-aarch64-none-linux-gnu.tar.xz
+            tar -xf arm-gnu-toolchain-13.2.rel1-x86_64-aarch64-none-linux-gnu.tar.xz
+            
+            TOOLCHAIN_PATH="$HOME/toolchains/arm-gnu-toolchain-13.2.rel1-x86_64-aarch64-none-linux-gnu/bin"
+            
+            # 将工具链添加到 PATH
+            echo "$TOOLCHAIN_PATH" >> $GITHUB_PATH
+            
+            # 创建软链接，使其兼容 aarch64-linux-gnu-xxx 的调用习惯
+            sudo ln -sf "$TOOLCHAIN_PATH/aarch64-none-linux-gnu-gcc" /usr/bin/aarch64-linux-gnu-gcc
+            sudo ln -sf "$TOOLCHAIN_PATH/aarch64-none-linux-gnu-g++" /usr/bin/aarch64-linux-gnu-g++
+            sudo ln -sf "$TOOLCHAIN_PATH/aarch64-none-linux-gnu-ld" /usr/bin/aarch64-linux-gnu-ld
+            
+            echo "Toolchain installed and symlinked."
+            $TOOLCHAIN_PATH/aarch64-none-linux-gnu-gcc --version
+          else
+            # 对于 Ubuntu 24.04 及其他版本，使用标准的 apt 安装
+            GCC_VER="14"
+            if [[ -n "${{ inputs.cuda-version }}" ]]; then
+              GCC_VER="13"
+            fi
+            
+            echo "Installing aarch64 cross-compiler version via apt: $GCC_VER"
+            sudo apt update
+            sudo apt install -y gcc make gcc-${GCC_VER}-aarch64-linux-gnu g++-${GCC_VER}-aarch64-linux-gnu binutils-aarch64-linux-gnu
+            
+            sudo update-alternatives --install /usr/bin/aarch64-linux-gnu-gcc aarch64-linux-gnu-gcc /usr/bin/aarch64-linux-gnu-gcc-${GCC_VER} 100 --slave /usr/bin/aarch64-linux-gnu-g++ aarch64-linux-gnu-g++ /usr/bin/aarch64-linux-gnu-g++-${GCC_VER}
           fi
-          # Default to 14, downgrade to 13 if CUDA is enabled
-          GCC_VER="14"
-          if [[ -n "${{ inputs.cuda-version }}" ]]; then
-            GCC_VER="13"
-          fi
-          
-          echo "Installing aarch64 cross-compiler version: $GCC_VER"
-          
-          sudo apt update
-          sudo apt install -y gcc make gcc-${GCC_VER}-aarch64-linux-gnu g++-${GCC_VER}-aarch64-linux-gnu binutils-aarch64-linux-gnu
-          
-          # Force the generic aarch64-linux-gnu-gcc/g++ commands to point to the installed version
-          # (Especially important if we installed 13, as system defaults might differ)
-          sudo update-alternatives --install /usr/bin/aarch64-linux-gnu-gcc aarch64-linux-gnu-gcc /usr/bin/aarch64-linux-gnu-gcc-${GCC_VER} 100 --slave /usr/bin/aarch64-linux-gnu-g++ aarch64-linux-gnu-g++ /usr/bin/aarch64-linux-gnu-g++-${GCC_VER}
 
       - name: Remove unnecessary software
         if: runner.os == 'Linux'

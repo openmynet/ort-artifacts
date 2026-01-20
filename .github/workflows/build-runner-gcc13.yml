@@ -81,24 +81,35 @@ jobs:
             mkdir -p $HOME/toolchains
             cd $HOME/toolchains
             
-            # 下载 Arm 官方工具链
+            # 1. 下载工具链
             wget -q https://developer.arm.com/-/media/Files/downloads/gnu/13.2.rel1/binrel/arm-gnu-toolchain-13.2.rel1-x86_64-aarch64-none-linux-gnu.tar.xz
+            
+            # 2. 解压
             tar -xf arm-gnu-toolchain-13.2.rel1-x86_64-aarch64-none-linux-gnu.tar.xz
             
-            TOOLCHAIN_PATH="$HOME/toolchains/arm-gnu-toolchain-13.2.rel1-x86_64-aarch64-none-linux-gnu/bin"
+            # 3. 关键修复：使用通配符重命名，避开大小写敏感问题 (Rel1 vs rel1)
+            # 这会将那个长文件夹统一重命名为 'gcc-arm-13'
+            mv arm-gnu-toolchain-13.2.*-aarch64-none-linux-gnu gcc-arm-13
             
-            # 将工具链添加到 PATH
+            TOOLCHAIN_PATH="$HOME/toolchains/gcc-arm-13/bin"
+            
+            # 4. 验证路径是否存在
+            if [ ! -f "$TOOLCHAIN_PATH/aarch64-none-linux-gnu-gcc" ]; then
+              echo "Error: Installation failed, binary not found in $TOOLCHAIN_PATH"
+              exit 1
+            fi
+            # 5. 添加到 PATH
             echo "$TOOLCHAIN_PATH" >> $GITHUB_PATH
             
-            # 创建软链接，使其兼容 aarch64-linux-gnu-xxx 的调用习惯
+            # 6. 创建标准命名的软链接
             sudo ln -sf "$TOOLCHAIN_PATH/aarch64-none-linux-gnu-gcc" /usr/bin/aarch64-linux-gnu-gcc
             sudo ln -sf "$TOOLCHAIN_PATH/aarch64-none-linux-gnu-g++" /usr/bin/aarch64-linux-gnu-g++
             sudo ln -sf "$TOOLCHAIN_PATH/aarch64-none-linux-gnu-ld" /usr/bin/aarch64-linux-gnu-ld
             
-            echo "Toolchain installed and symlinked."
-            $TOOLCHAIN_PATH/aarch64-none-linux-gnu-gcc --version
+            echo "Toolchain installed and symlinked successfully."
+            /usr/bin/aarch64-linux-gnu-gcc --version
           else
-            # 对于 Ubuntu 24.04 及其他版本，使用标准的 apt 安装
+            # 对于 Ubuntu 24.04 及其他版本
             GCC_VER="14"
             if [[ -n "${{ inputs.cuda-version }}" ]]; then
               GCC_VER="13"

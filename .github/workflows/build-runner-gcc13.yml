@@ -105,6 +105,9 @@ jobs:
             sudo ln -sf "$TOOLCHAIN_PATH/aarch64-none-linux-gnu-gcc" /usr/bin/aarch64-linux-gnu-gcc
             sudo ln -sf "$TOOLCHAIN_PATH/aarch64-none-linux-gnu-g++" /usr/bin/aarch64-linux-gnu-g++
             sudo ln -sf "$TOOLCHAIN_PATH/aarch64-none-linux-gnu-ld" /usr/bin/aarch64-linux-gnu-ld
+            # 7. 创建带 -13 后缀的软链接（CMake 工具链文件需要）
+            sudo ln -sf "$TOOLCHAIN_PATH/aarch64-none-linux-gnu-gcc" /usr/bin/aarch64-linux-gnu-gcc-13
+            sudo ln -sf "$TOOLCHAIN_PATH/aarch64-none-linux-gnu-g++" /usr/bin/aarch64-linux-gnu-g++-13
             
             echo "Toolchain installed and symlinked successfully."
             /usr/bin/aarch64-linux-gnu-gcc --version

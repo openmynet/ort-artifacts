@@ -1,4 +1,4 @@
-name: Build All Targets Origin
+name: Build All Targets Origin Linux
 
 on:
   workflow_dispatch:

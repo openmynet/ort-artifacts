@@ -1,0 +1,40 @@
+name: Build All Linux ARM64 Jetson CUDA 12.6
+
+on:
+  workflow_dispatch:
+    inputs:
+      onnxruntime-version:
+        type: string
+        description: "ONNX Runtime version (e.g. 1.18.0)"
+        required: true
+
+jobs:
+  build:
+    uses: ./.github/workflows/build-runner-gcc13.yml
+
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - target: aarch64-unknown-linux-gnu
+            args: "-A aarch64 --cuda --xnnpack -N"
+            static: true
+            feature-set: cu12
+            cuda-version: "12.6.1"
+            runs-on: ubuntu-24.04
+          - target: aarch64-unknown-linux-gnu
+            args: "-A aarch64 --cuda --xnnpack -N"
+            static: false
+            feature-set: cu12
+            cuda-version: "12.6.1"
+            runs-on: ubuntu-24.04
+
+
+    with:
+      onnxruntime-version: ${{ inputs.onnxruntime-version }}
+      target: ${{ matrix.target }}
+      args: ${{ matrix.args }}
+      static: ${{ matrix.static }}
+      feature-set: ${{ matrix.feature-set }}
+      cuda-version: ${{ matrix.cuda-version }}
+      runs-on: ${{ matrix.runs-on }}
